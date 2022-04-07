@@ -4,16 +4,8 @@ using UnityEngine;
 
 public class Create : MonoBehaviour
 {
-    cord [] riverpoints = new cord[100];
-    cord [] city = new cord [] {
-        new cord {x=0, y=0},
-        new cord {x=5, y=8}
-    };
-
-    public float riverperiod = 25f;
-    public float riverOffsetFactor = 10f;
-    public int width = 256;
-    public int height = 256;
+    public int width = 256; // Links
+    public int height = 256; // Omhoog
     public int depth = 20;
     public float scale = 20f;
     public float spread = 25f;
@@ -41,66 +33,92 @@ public class Create : MonoBehaviour
         offsetY = Random.Range(0f, 9999f);
         Terrain terrain = GetComponent<Terrain>();
         terrain.terrainData = GenerateTerrain(terrain.terrainData);
+        Debug.Log("Runtime: " + Time.realtimeSinceStartup);
     }
 
     TerrainData GenerateTerrain (TerrainData terrainData){
         terrainData.heightmapResolution = width + 1;
         terrainData.size = new Vector3(width, depth, height);
         float[,] mainTerrain = new float[width, height];
-        mainTerrain = GenerateHeights(2, false);
+        mainTerrain = GenerateHeights(2);
 
         // Genereer extra basisfilters voor het terrein (telt voor 1/x mee)
         offsetX = Random.Range(0f, 9999f);
         offsetY = Random.Range(0f, 9999f);
 
         float[,] filter = new float[width, height];
-        filter = GenerateHeights(4, false);
+        filter = GenerateHeights(4);
 
         offsetX = Random.Range(0f, 9999f);
         offsetY = Random.Range(0f, 9999f);
 
         float[,] filter2 = new float[width, height];
-        filter2 = GenerateHeights(8, false);
+        filter2 = GenerateHeights(8);
         
-        //Genereer stad/dorp (0 = terrein; 1 = stad/dorp)
+        //Genereer stad/dorp in boolean map (0 = terrein; 1 = stad/dorp)
         float[,] cityTerrain = new float[width, height];
-        //GetCity(x middelpunt vd stad, y middelpunt vd stad, inhoud, referentie naar terrein van stad)
         GetCity(220, 220, 1000, ref cityTerrain);
-        GetCity(100, 100, 1600, ref cityTerrain);
-        GetCity(200, 50, 2600, ref cityTerrain);
+        GetCity(180, 100, 1600, ref cityTerrain);
+        GetCity(50, 50, 2600, ref cityTerrain);
+        GetCity(100, 200, 2600, ref cityTerrain);
 
-        // Genereer olievlek met veel te veel if-statements.....
-        int[] diffX = new int[4]{0, 1, 0, -1};
-        int[] diffY = new int[4]{1, 0, -1, 0};
+        // Genereer olievlek (overvloeien platte vlak stad met landschap)
         int x, y;
-        for (y = 0; y < height; y++){
-            for (x = 0; x < width; x++){
-                if (cityTerrain[x, y] == 1){
-                    for (int r = 0; r < 4; r++){ // Alle windrichtingen nagaan om afstanden tot stad te updaten.
-                        for (int l = 0; l < spread; l++){ // Update over een bepaalde afstand (grootte van de overgang)
-                            for (int i = -l; i <= l; i++){
-                                // Genereer positie van aan te passen
-                                int dx, dy;
-                                if (diffX[r] != 0) dx = x + diffX[r] * i;
-                                else dx = x + l * diffY[r];
-                                if (diffY[r] != 0) dy = y + diffY[r] * i;
-                                else dy = y + l * diffX[r];
-                            
-                                if (dy >= 0 && dy < height && dx >= 0 && dx < width){ // Controleer of de positie binnen het terrein valt
-                                    if (cityTerrain[dx, dy] > l || cityTerrain[dx, dy] == 0) cityTerrain[dx, dy] = l + 1; // Enkel aanpassen als de afstand omlaag moet
-                                }
-                            }
-                        }
+        for (x = 0; x < width; x++){
+            float PreviousValue = 0;
+            for (y = 0; y < height; y++){
+                if (PreviousValue > 0){
+                    if (cityTerrain[x, y] == 0 && PreviousValue + 1 < spread || cityTerrain[x, y] > PreviousValue + 1){
+                        cityTerrain[x, y] = PreviousValue + 1;
                     }
                 }
+                PreviousValue = cityTerrain[0 + x, 0 + y];
+            }
+
+            PreviousValue = 0;
+            for (y = y - 1; y >= 0; y--){
+                if (PreviousValue > 0){
+                    if (cityTerrain[x, y] == 0 && PreviousValue + 1 < spread || cityTerrain[x, y] > PreviousValue + 1){
+                        cityTerrain[x, y] = PreviousValue + 1;
+                    }
+                }
+                PreviousValue = cityTerrain[0 + x, 0 + y];
+            }
+        }
+
+        for (y = 0; y < height; y++){
+            float PreviousValue = 0;
+            for (x = 0; x < width; x++){
+                if (PreviousValue > 0){
+                    if (cityTerrain[x, y] == 0 && PreviousValue + 1 < spread || cityTerrain[x, y] > PreviousValue + 1){
+                        cityTerrain[x, y] = PreviousValue + 1;
+                    }
+                }
+                PreviousValue = cityTerrain[0 + x, 0 + y];
+            }
+
+            PreviousValue = 0;
+            for (x = x - 1; x >= 0; x--){
+                if (PreviousValue > 0){
+                    if (cityTerrain[x, y] == 0 && PreviousValue + 1 < spread || cityTerrain[x, y] > PreviousValue + 1){
+                        cityTerrain[x, y] = PreviousValue + 1;
+                    }
+                }
+                PreviousValue = cityTerrain[0 + x, 0 + y];
             }
         }
 
         // Schrijf de gekregen gegevens om naar een factor (0 <= f <= 1)
         // Formule: 0.5 * sin(x - 0.5π) + 0.5
+        float[] factorValues = new float[(int)spread + 1];
+        for (int i = 0; i <= (int)spread; i++){
+            factorValues[i] = 0.5f * Mathf.Sin(i / spread * Mathf.PI - 0.5f * Mathf.PI) + 0.5f;
+        }
+
+    	// Schrijf het cityterrain over naar een filter
         for (x = 0; x < width; x++){
             for (y = 0; y < height; y++){
-                if (cityTerrain[x, y] > 1) cityTerrain[x, y] = 0.5f * Mathf.Sin(cityTerrain[x, y] / spread * Mathf.PI - 0.5f * Mathf.PI) + 0.5f;
+                if (cityTerrain[x, y] > 1) cityTerrain[x, y] = factorValues[(int)cityTerrain[x, y]];
                 else if (cityTerrain[x, y] == 1) cityTerrain[x, y] = 0;
                 else cityTerrain[x, y] = 1;
             }
@@ -123,44 +141,34 @@ public class Create : MonoBehaviour
     }
     
     void GetCity(int centerx, int centery, int Inhoud, ref float[,] cityTerrain){
-        // float[,] cityTerrain = new float[width, height];
         float AverageLength = (float)Mathf.Sqrt(Inhoud / Mathf.PI);
         float DiffLength = 0f;
         if (AverageLength > 25f) DiffLength = 16f;
         else if (AverageLength > 18f) DiffLength = 12f;
         else if (AverageLength > 10f) DiffLength = 5f;
+        cord[] riveroutput = new cord[60];
         float firstlength = 0f;
 
         for (int i = 0; i <= 60; i++){ // Bereken 60 verschillende coordinaten
             float length = 0f;
-            p2.x = p1.x;
-            p2.y = p1.y;
+            int index = 0;
             if (i < 60){
                 // Bereken x, y positie randpunten
-                length = AverageLength - DiffLength + CalculateHeight(0, i, false, 25f) * DiffLength * 2f;
+                index = i;
+                length = AverageLength - DiffLength + CalculateHeight(0, i, 25f) * DiffLength * 2f;
                 if (i > 50) length = (firstlength - length) / 10 * (i - 50) + length;
-                p1.x = centerx + (int)(Mathf.Cos(2f * Mathf.PI / 60f * (float)i) * length);
-                p1.y = centery + (int)(Mathf.Sin(2f * Mathf.PI / 60f * (float)i) * length);
-            }else{
-                p1.x = first.x;
-                p1.y = first.y;
-            }
+                riveroutput[i] = new cord {x = centerx + (int)(Mathf.Cos(2f * Mathf.PI / 60f * (float)i) * length), y = centery + (int)(Mathf.Sin(2f * Mathf.PI / 60f * (float)i) * length)};
+            }else index = 0;
 
             if (i > 0){
                 // Functie bepaling rand stad/dorp
-                dx = p2.x - p1.x;
-                dy = p2.y - p1.y;
                 max = 0;
+                dx = riveroutput[i - 1].x - riveroutput[index].x;
+                dy = riveroutput[i - 1].y - riveroutput[index].y;
                 if (abs(dx) < abs(dy)) max = abs(dy);
                 else max = abs(dx);
-                for (int n = 0; n <= max + 1; n++){
-                    cityTerrain[CheckX(p1.x + (int)Mathf.Round(((float)dx / (float)max * (float)n))), CheckY(p1.y + (int)Mathf.Round(((float)dy / (float)max * (float)n)))] = 1;
-                }
-            }else{
-                first.x = p1.x;
-                first.y = p1.y;
-                firstlength = length;
-            }
+                for (int n = 0; n <= max + 1; n++) cityTerrain[CheckX(riveroutput[index].x + (int)Mathf.Round(((float)dx / (float)max * (float)n))), CheckY(riveroutput[index].y + (int)Mathf.Round(((float)dy / (float)max * (float)n)))] = 1;
+            }else firstlength = length;
         }
 
         // Genereer boolean map voor plaatsbepaling stad
@@ -177,7 +185,9 @@ public class Create : MonoBehaviour
                 }
             }
         }
-        Rec(centerx, centery); //Recursieve functie voor opvulling stad terrein.
+        Rec(centerx, centery); // Recursieve functie voor opvulling stad terrein.
+
+        GenerateRiver(riveroutput, ref cityTerrain);
         cityTerrain = test;
     }
 
@@ -193,90 +203,30 @@ public class Create : MonoBehaviour
         return input;
     }
 
-    float[,] GenerateHeights(float factor, bool city){
+    float[,] GenerateHeights(float factor){
         float[,] heights = new float[width, height];
         for (int x = 0; x < width; x++){
             for (int y = 0; y < height; y++){
-                heights[x, y] = CalculateHeight(x, y, city, scale) / factor;
+                heights[x, y] = CalculateHeight(x, y, scale) / factor;
             }
         }
 
         return heights;
     }
-    float CalculateHeight(int x, int y, bool city, float scale){
+    float CalculateHeight(int x, int y, float scale){
         float xCoord, yCoord;
-
-        if (!city){
-            xCoord = (float)x / width * scale + offsetX;
-            yCoord = (float)y / height * scale + offsetY;
-        }else{
-            xCoord = (float)x / width * 2 + offsetX;
-            yCoord = (float)y / height * 2 + offsetY;
-        }
+        xCoord = (float)x / width * scale + offsetX;
+        yCoord = (float)y / height * scale + offsetY;
         
         return Mathf.PerlinNoise(xCoord, yCoord); 
     }
 
-    float[,] GenerateRiver(cord [] city, ref float [,] cityTerrain){
-
-        Debug.Log("You came");
+    float[,] GenerateRiver(cord[] city1, ref float[,] city){
         float[,] output = new float[width, height];
         //sixty boundary points of the city
         // a river will be generated between these two points
-        //int riverpoint1number = Random.Range(0,59);
-        //int riverpoint2number = (riverpoint1 + Random.Range(20,39))%60; //may not overflow the array of boundary points
-
-        int riverpoint1number = 0;
-        int riverpoint2number = 1;
-
-        cord riverpoint1 = city[riverpoint1number];
-        cord riverpoint2 = city[riverpoint2number];
-
-        //draw line between city points for referance
-        dx = riverpoint2.x - riverpoint1.x;
-        dy = riverpoint2.y - riverpoint1.y;
-
-        //rico from the normal, used by riveroffset
-        int dx_offset = dy;
-        int dy_offset = -dx;
- 
-        max = 0;
-        // calculate the maximum delta
-        if (abs(dx) < abs(dy)) max = abs(dy);
-        else max = abs(dx);
-
-
-        for (int n = 0; n <= max; n++){
-
-            int riverpointx = CheckX(riverpoint1.x + (int)Mathf.Round(((float)dx / (float)max * (float)n)));
-            int riverpointy = CheckY(riverpoint1.y + (int)Mathf.Round(((float)dy / (float)max * (float)n)));
-
-            float riveroffset = riverOffsetFactor * (CalculateHeight(0, n, false, riverperiod)-0.5f);
-
-            float riverpointOffsetFactor = riveroffset/Mathf.Sqrt(Mathf.Pow((int)dx_offset,2f)+Mathf.Pow((int)dy_offset,2f));
-
-            riverpointx += (int)Mathf.Round((int)dx_offset * (float)riverpointOffsetFactor);
-            riverpointy += (int)Mathf.Round((int)dy_offset * (float)riverpointOffsetFactor);
-
-            riverpoints [n] = new cord{
-                x=riverpointx,
-                y=riverpointy
-            };
-            Debug.Log("x: " + riverpoints[n].x);
-            Debug.Log("y: " + riverpoints[n].y);
-            
-            
-
-            
-            
-            
-
-
-
-            //cityTerrain[CheckX(riverpoint1.x + (int)Mathf.Round(((float)dx / (float)max * (float)n))), CheckY(riverpoint1.y + (int)Mathf.Round(((float)dy / (float)max * (float)n)))] = 1;
-        }
-
-        
+        int riverpoint1 = Random.Range(0,59);
+        int riverpoint2 = (riverpoint1 + Random.Range(20,39))%60; //may not overflow the array of boundary points
 
         
 
